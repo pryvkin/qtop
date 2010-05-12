@@ -102,26 +102,29 @@ end
 
 fields = %w{ queue nodes cpu mem load_avg mem_used mem_tot }
 field_widths = [27, 7, 7, 7, 7, 9, 9]
+field_just = [:lpad, :rpad, :rpad, :rpad, :rpad, :rpad, :rpad]
 
-fields.each_with_index { |s,i| fields[i] = s.send( i==0 ? :lpad : :rpad, field_widths[i]) }
+fields.each_with_index { |s,i| fields[i] = s.send( field_just[i], field_widths[i]) }
 puts fields.join(' ')
 
 begin
-queues.each do |q|
-  cpu_pct, mem_pct, load_avg, mem_used, mem_total = ['-NA-']*5
-
-  if !q['states'] || q['states'] !~  /[au]/
-    cpu_pct = "#{format("%.1f",q['hl:cpu'].to_f)}%"
-
-    mem_pct = format("%.1f%%", 100.0 * q['hl:mem_used'].to_bytes / q['hl:mem_total'].to_bytes)
-
-    load_avg, mem_used, mem_total = q.values_at(*%w{ load_avg hl:mem_used hl:mem_total } )
+  queues.each do |q|
+    cpu_pct, mem_pct, load_avg, mem_used, mem_total = ['-NA-']*5
+    
+    if !q['states'] || q['states'] !~  /[au]/
+      cpu_pct = "#{format("%.1f",q['hl:cpu'].to_f)}%"
+      
+      mem_pct = format("%.1f%%", 100.0 * q['hl:mem_used'].to_bytes / q['hl:mem_total'].to_bytes)
+      
+      load_avg, mem_used, mem_total = q.values_at(*%w{ load_avg hl:mem_used hl:mem_total } )
+    end
+    
+    info = [q['queuename'], q['used/tot.'], cpu_pct, mem_pct, load_avg, mem_used, mem_total]
+    info.each_with_index { |s,i| info[i] = s.send( field_just[i], field_widths[i]) }
+    puts info.join(' ')
   end
-
-  info = [q['queuename'], q['used/tot.'], cpu_pct, mem_pct, load_avg, mem_used, mem_total]
-  info.each_with_index { |s,i| info[i] = s.send( i==0 ? :lpad : :rpad, field_widths[i]) }
-  puts info.join(' ')
-end
 rescue Errno::EPIPE
+  # sometimes watch will kill stdout while ruby's trying to write to it
+  # thus causing ruby to print an ugly "broken pipe" msg. this prevents that
   exit
 end
