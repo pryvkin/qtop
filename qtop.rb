@@ -40,12 +40,13 @@ qstat_text.each_line do |line|
 
   if line =~ /^-+$/
     new_q = true
+
   elsif new_q
     queues << Hash.new
     queues.last['index'] = queues.size-1
-    q_vals = line.split(/\s+/)
-    qfields.each_with_index { |k,i| queues.last[k] = q_vals[i] }
+    line.split(/\s+/).each_with_index { |val, i| queues.last[qfields[i]] = val }
     new_q = false
+
   elsif line =~ /^\t([^=]+)=(.+)/
     queues.last[$1] = $2
   end
@@ -60,7 +61,7 @@ queues.each do |q|
   end
 end
 
-
+# sort descending by nodes used then by qstat's reporting order
 queues.sort! do |q1,q2|
   used_cmp = q2['used/tot.'].split(/\//).first.to_i <=> q1['used/tot.'].split(/\//).first.to_i
   if used_cmp != 0
@@ -82,29 +83,21 @@ class String
       when "G"; pre *= 1e9
       end
     end
+    return pre
   end
   def trunc(width)
-    if self.size > width
-      self[0...width]
-    else
-      self
-    end
+    self[0...([self.size, width].min)]
   end
-  def lpad(width)
-    s = self.trunc(width)
-    s.ljust(width)
-  end
-  def rpad(width)
-    s = self.trunc(width)
-    s.rjust(width)
+  def pad(width, just)
+    self.trunc(width).send(just, width)
   end
 end
 
 fields = %w{ queue nodes cpu mem load_avg mem_used mem_tot }
 field_widths = [27, 7, 7, 7, 7, 9, 9]
-field_just = [:lpad, :rpad, :rpad, :rpad, :rpad, :rpad, :rpad]
+field_justs = [:ljust, :rjust, :rjust, :rjust, :rjust, :rjust, :rjust]
 
-fields.each_with_index { |s,i| fields[i] = s.send( field_just[i], field_widths[i]) }
+fields.each_with_index { |s,i| fields[i] = s.pad( field_widths[i], field_justs[i]) }
 puts fields.join(' ')
 
 begin
@@ -120,7 +113,7 @@ begin
     end
     
     info = [q['queuename'], q['used/tot.'], cpu_pct, mem_pct, load_avg, mem_used, mem_total]
-    info.each_with_index { |s,i| info[i] = s.send( field_just[i], field_widths[i]) }
+    info.each_with_index { |s,i| info[i] = s.pad( field_widths[i], field_justs[i]) }
     puts info.join(' ')
   end
 rescue Errno::EPIPE
