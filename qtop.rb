@@ -20,10 +20,10 @@
 #You should have received a copy of the GNU General Public License
 #along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
+require 'getoptlong'
 
 cmd = "qstat -F"
-#cmd = "cat test.qstatF"
+#cmd = "cat beta.qstat"
 
 qstat_text = `#{cmd}`
 
@@ -53,11 +53,15 @@ qstat_text.each_line do |line|
   end
 end
 
-class Array
-  def sort_by!(&block)
-    self.replace(self.sort_by(&block))
+# some queues report 'resv/used/tot.' instead of 'used/tot.'
+queues.each do |q|
+  q.each do |key, val|
+    if key =~ /used\/tot.$/
+      q['used/tot.'] = val.split(/\//)[-2..-1].join("/")
+    end
   end
 end
+
 
 queues.sort! do |q1,q2|
   used_cmp = q2['used/tot.'].split(/\//).first.to_i <=> q1['used/tot.'].split(/\//).first.to_i
@@ -81,26 +85,45 @@ class String
       end
     end
   end
+  def trunc(width)
+    if self.size > width
+      self[0...width]
+    else
+      self
+    end
+  end
   def lpad(width)
-    s = if self.size > width
-          self[0...width]
-        else
-          self
-        end
+    s = self.trunc(width)
     s.ljust(width)
+  end
+  def rpad(width)
+    s = self.trunc(width)
+    s.rjust(width)
   end
 end
 
-fields = %w{ queue used/tot cpu mem load_avg mem_used mem_tot }
-field_widths = [20, 10, 10, 10, 10, 10, 10]
+fields = %w{ queue nodes cpu mem load_avg mem_used mem_tot }
+field_widths = [27, 7, 7, 7, 7, 9, 9]
 
-fields.each_with_index { |s,i| fields[i] = s.lpad(field_widths[i]) }
-puts fields.join
+fields.each_with_index { |s,i| fields[i] = s.send( i==0 ? :lpad : :rpad, field_widths[i]) }
+puts fields.join(' ')
 
+begin
 queues.each do |q|
-  mem_pct = format("%.1f%%", 100.0 * q['hl:mem_used'].to_bytes / q['hl:mem_total'].to_bytes)
-  cpu_pct = "#{format("%.1f",q['hl:cpu'].to_f)}%"
-  info = [q['queuename'], q['used/tot.'], cpu_pct, mem_pct, q['load_avg'], q['hl:mem_used'], q['hl:mem_total']]
-  info.each_with_index { |s,i| info[i] = s.lpad(field_widths[i]) }
-  puts info.join
+  cpu_pct, mem_pct, load_avg, mem_used, mem_total = ['-NA-']*5
+
+  if !q['states'] || q['states'] !~  /[au]/
+    cpu_pct = "#{format("%.1f",q['hl:cpu'].to_f)}%"
+
+    mem_pct = format("%.1f%%", 100.0 * q['hl:mem_used'].to_bytes / q['hl:mem_total'].to_bytes)
+
+    load_avg, mem_used, mem_total = q.values_at(*%w{ load_avg hl:mem_used hl:mem_total } )
+  end
+
+  info = [q['queuename'], q['used/tot.'], cpu_pct, mem_pct, load_avg, mem_used, mem_total]
+  info.each_with_index { |s,i| info[i] = s.send( i==0 ? :lpad : :rpad, field_widths[i]) }
+  puts info.join(' ')
+end
+rescue Errno::EPIPE
+  exit
 end
