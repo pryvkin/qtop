@@ -1,7 +1,10 @@
 #!/usr/bin/env ruby
 
-#cmd = "qstat -F"
-cmd = "cat test.qstatF"
+# to use:
+# watch ruby qtop.rb
+
+cmd = "qstat -F"
+#cmd = "cat test.qstatF"
 
 qstat_text = `#{cmd}`
 
@@ -47,10 +50,6 @@ queues.sort! do |q1,q2|
 end
 
 class String
-  def to_pct
-    format("%.1f%%", self.to_f*100)
-  end
-
   def to_bytes
     self =~ /(.+?)([^0-9]{0,1})$/
     pre = $1.to_f
@@ -80,8 +79,9 @@ fields.each_with_index { |s,i| fields[i] = s.lpad(field_widths[i]) }
 puts fields.join
 
 queues.each do |q|
-  mem_pct = "#{q['hl:mem_used'].to_bytes / q['hl:mem_total'].to_bytes}".to_pct
-  info = [q['queuename'], q['used/tot.'], q['hl:cpu'].to_pct, mem_pct, q['load_avg'], q['hl:mem_used'], q['hl:mem_total']]
+  mem_pct = format("%.1f%%", 100.0 * q['hl:mem_used'].to_bytes / q['hl:mem_total'].to_bytes)
+  cpu_pct = "#{format("%.1f",q['hl:cpu'].to_f)}%"
+  info = [q['queuename'], q['used/tot.'], cpu_pct, mem_pct, q['load_avg'], q['hl:mem_used'], q['hl:mem_total']]
   info.each_with_index { |s,i| info[i] = s.lpad(field_widths[i]) }
   puts info.join
 end
