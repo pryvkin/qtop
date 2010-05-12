@@ -1,0 +1,7 @@
+qtop
+
+Displays summary info of all the queues. Useful for monitoring cpu/mem usage across a cluster.
+
+Requires ruby and Sun Grid Engine. 
+
+Questions/comments to <paulnik@gmail.com>
