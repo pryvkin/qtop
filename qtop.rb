@@ -24,6 +24,9 @@
 cmd = "qstat -F"
 qstat_text = `#{cmd}`
 
+# avoid throwing exceptions on interrupt
+trap("SIGINT") { print "\n"; exit! }
+
 while true
   system "clear"
 
