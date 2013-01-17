@@ -1,11 +1,12 @@
 #!/usr/bin/env ruby
 # qtop
 #
-# Monitor resource usage of a cluster
+# Monitor resource usage of an SGE cluster
 # To use:
-#   watch ruby qtop.rb
+#   ruby qtop.rb
+# and hit Ctrl-C to exit
 #
-#Copyright (C) 2010 Paul Ryvkin <paulnik@gmail.com>
+#Copyright (C) 2013 Paul Ryvkin <paulnik@gmail.com>
 #
 #This program is free software: you can redistribute it and/or modify
 #it under the terms of the GNU General Public License as published by
@@ -21,103 +22,112 @@
 #along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 cmd = "qstat -F"
-#cmd = "cat beta.qstat"
-
 qstat_text = `#{cmd}`
 
-queues = []
-first_line = true
-qfields = ''
-new_q = false
+while true
+  system "clear"
 
-qstat_text.each_line do |line|
-  line.chomp!
+  puts Time.now
 
-  if first_line
-    first_line = false
-    qfields = line.split(/\s+/)
-  end
+  queues = []
+  first_line = true
+  qfields = ''
+  new_q = false
 
-  if line =~ /^-+$/
-    new_q = true
+  qstat_text.each_line do |line|
+    line.chomp!
 
-  elsif new_q
-    queues << Hash.new
-    queues.last['index'] = queues.size-1
-    line.split(/\s+/).each_with_index { |val, i| queues.last[qfields[i]] = val }
-    new_q = false
+    if first_line
+      first_line = false
+      qfields = line.split(/\s+/)
+    end
 
-  elsif line =~ /^\t([^=]+)=(.+)/
-    queues.last[$1] = $2
-  end
-end
+    if line =~ /^-+$/
+      new_q = true
 
-# some queues report 'resv/used/tot.' instead of 'used/tot.'
-queues.each do |q|
-  q.each do |key, val|
-    if key =~ /used\/tot.$/
-      q['used/tot.'] = val.split(/\//)[-2..-1].join("/")
+    elsif new_q
+      queues << Hash.new
+      queues.last['index'] = queues.size-1
+      line.split(/\s+/).each_with_index {
+        |val, i| queues.last[qfields[i]] = val
+      }
+      new_q = false
+
+    elsif line =~ /^\t([^=]+)=(.+)/
+      queues.last[$1] = $2
     end
   end
-end
 
-# sort descending by nodes used then by qstat's reporting order
-queues.sort! do |q1,q2|
-  used_cmp = q2['used/tot.'].split(/\//).first.to_i <=> q1['used/tot.'].split(/\//).first.to_i
-  if used_cmp != 0
-    used_cmp
-  else
-    q1['index'] <=> q2['index']
-  end
-end
-
-class String
-  def to_bytes
-    self =~ /(.+?)([^0-9]{0,1})$/
-    pre = $1.to_f
-    suffix = $2 if $2
-    if suffix
-      case suffix.upcase
-      when "K"; pre *= 1e3
-      when "M"; pre *= 1e6
-      when "G"; pre *= 1e9
+  # some queues report 'resv/used/tot.' instead of 'used/tot.'
+  queues.each do |q|
+    q.each do |key, val|
+      if key =~ /used\/tot.$/
+        q['used/tot.'] = val.split(/\//)[-2..-1].join("/")
       end
     end
-    return pre
   end
-  def trunc(width)
-    self[0...([self.size, width].min)]
+
+  # sort descending by nodes used then by qstat's reporting order
+  queues.sort! do |q1,q2|
+    used_cmp = q2['used/tot.'].split(/\//).first.to_i <=> 
+      q1['used/tot.'].split(/\//).first.to_i
+    if used_cmp != 0
+      used_cmp
+    else
+      q1['index'] <=> q2['index']
+    end
   end
-  def pad(width, just)
-    self.trunc(width).send(just, width)
+
+  class String
+    def to_bytes
+      self =~ /(.+?)([^0-9]{0,1})$/
+      pre = $1.to_f
+      suffix = $2 if $2
+      if suffix
+        case suffix.upcase
+        when "K"; pre *= 1e3
+        when "M"; pre *= 1e6
+        when "G"; pre *= 1e9
+        end
+      end
+      return pre
+    end
+    def trunc(width)
+      self[0...([self.size, width].min)]
+    end
+    def pad(width, just)
+      self.trunc(width).send(just, width)
+    end
   end
-end
 
-fields = %w{ queue nodes cpu mem load_avg mem_used mem_tot }
-field_widths = [27, 7, 7, 7, 7, 9, 9]
-field_justs = [:ljust, :rjust, :rjust, :rjust, :rjust, :rjust, :rjust]
+  fields = %w{ queue nodes cpu mem load_avg mem_used mem_tot }
+  field_widths = [27, 7, 7, 7, 7, 9, 9]
+  field_justs = [:ljust, :rjust, :rjust, :rjust, :rjust, :rjust, :rjust]
 
-fields.each_with_index { |s,i| fields[i] = s.pad( field_widths[i], field_justs[i]) }
-puts fields.join(' ')
+  fields.each_with_index { |s,i| fields[i] =
+    s.pad( field_widths[i], field_justs[i]) }
+  puts fields.join(' ')
 
-begin
   queues.each do |q|
     cpu_pct, mem_pct, load_avg, mem_used, mem_total = ['-NA-']*5
     
     if !q['states'] || q['states'] !~  /[au]/
       cpu_pct = "#{format("%.1f",q['hl:cpu'].to_f)}%"
       
-      mem_pct = format("%.1f%%", 100.0 * q['hl:mem_used'].to_bytes / q['hl:mem_total'].to_bytes)
+      mem_pct = format("%.1f%%", 100.0 * q['hl:mem_used'].to_bytes / 
+                       q['hl:mem_total'].to_bytes)
       
-      load_avg, mem_used, mem_total = q.values_at(*%w{ load_avg hl:mem_used hl:mem_total } )
+      load_avg, mem_used, mem_total = 
+        q.values_at(*%w{ load_avg hl:mem_used hl:mem_total } )
     end
     
-    info = [q['queuename'], q['used/tot.'], cpu_pct, mem_pct, load_avg, mem_used, mem_total]
-    info.each_with_index { |s,i| info[i] = s.pad( field_widths[i], field_justs[i]) }
+    info = [q['queuename'], q['used/tot.'], cpu_pct, mem_pct, load_avg,
+            mem_used, mem_total]
+    info.each_with_index {
+      |s,i| info[i] = s.pad( field_widths[i], field_justs[i]) 
+    }
     puts info.join(' ')
   end
-rescue Errno::EPIPE
-  # sometimes watch will kill stdout while ruby's trying to write to it
-  # thus causing ruby to print an ugly "broken pipe" msg. this prevents that
-  exit
+
+  sleep 2
 end

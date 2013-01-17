@@ -1,6 +1,6 @@
 qtop
 
-USAGE: watch ruby qtop.rb
+USAGE: ruby qtop.rb
 
 Displays summary info of all the queues. Useful for monitoring cpu/mem usage across a cluster.
 
